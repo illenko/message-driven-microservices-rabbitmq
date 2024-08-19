@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/illenko/common/mapper"
 	"log"
+
+	"github.com/google/uuid"
+	"github.com/illenko/common/mapper"
 
 	"github.com/illenko/common/amqpmodel"
 	"github.com/illenko/common/consumer"
@@ -10,15 +12,22 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+var failedItemId = uuid.MustParse("00000000-0000-0000-0000-000000000000")
+
 func consumeProductReservationMessages(ch *amqp.Channel) {
-	consumer.ConsumeOrderAction(ch, "product-reservation-action-queue", processProductReservation)
-}
+	consumer.ConsumeMessages(ch, "product-reservation-action-queue", func(orderAction amqpmodel.OrderAction) {
+		status := amqpmodel.OrderActionResultStatusSuccess
 
-func processProductReservation(ch *amqp.Channel, orderAction amqpmodel.OrderAction) {
-	orderResult := mapper.ToOrderActionResult(orderAction, amqpmodel.OrderActionResultStatusSuccess)
+		if orderAction.ItemID == failedItemId {
+			status = amqpmodel.OrderActionResultStatusFailed
+		}
 
-	err := publisher.PublishOrderResult(ch, "order-result-exchange", "product-reservation-result-queue", orderResult)
-	if err != nil {
-		log.Printf("Failed to publish order result: %v", err)
-	}
+		orderResult := mapper.ToOrderActionResult(orderAction, status)
+
+		err := publisher.PublishMessage(ch, "order-result-exchange", "product-reservation-result-queue", orderResult)
+		if err != nil {
+			log.Printf("Failed to publish order result: %v", err)
+		}
+
+	})
 }

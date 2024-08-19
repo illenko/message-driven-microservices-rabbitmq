@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/illenko/common/amqpmodel"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func ConsumeOrderAction(ch *amqp.Channel, queueName string, processFunc func(*amqp.Channel, amqpmodel.OrderAction)) {
+func ConsumeMessages[T any](ch *amqp.Channel, queueName string, processFunc func(T)) {
 	msgs, err := ch.Consume(
 		queueName,
 		"",
@@ -23,14 +22,14 @@ func ConsumeOrderAction(ch *amqp.Channel, queueName string, processFunc func(*am
 	}
 
 	for msg := range msgs {
-		var orderAction amqpmodel.OrderAction
-		err := json.Unmarshal(msg.Body, &orderAction)
+		var message T
+		err := json.Unmarshal(msg.Body, &message)
 		if err != nil {
 			log.Printf("Failed to unmarshal message: %v", err)
 			continue
 		}
 
-		log.Printf("Received a message from %v: %v", queueName, orderAction)
-		processFunc(ch, orderAction)
+		log.Printf("Received a message from %v: %v", queueName, message)
+		processFunc(message)
 	}
 }

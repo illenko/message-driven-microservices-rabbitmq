@@ -9,9 +9,7 @@ import (
 )
 
 func consumeProductCancellationMessages(ch *amqp.Channel) {
-	consumer.ConsumeOrderAction(ch, "product-cancellation-action-queue", processProductCancellation)
-}
-
-func processProductCancellation(_ *amqp.Channel, orderAction amqpmodel.OrderAction) {
-	log.Printf("Processing product cancellation: %v and other work will be done...", orderAction)
+	consumer.ConsumeMessages(ch, "product-cancellation-action-queue", func(orderAction amqpmodel.OrderAction) {
+		log.Printf("Processing product cancellation: %v and other work will be done...", orderAction)
+	})
 }

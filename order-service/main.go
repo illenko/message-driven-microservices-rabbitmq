@@ -2,67 +2,100 @@ package main
 
 import (
 	"log"
+	"net/http"
 
-	"github.com/google/uuid"
-	"github.com/illenko/common/amqpmodel"
-	"github.com/illenko/common/connection"
+	"github.com/illenko/order-service/internal/consumer"
+	"github.com/illenko/order-service/internal/handler"
+	"github.com/illenko/order-service/internal/mapper"
+	"github.com/illenko/order-service/internal/messaging"
+	"github.com/illenko/order-service/internal/publisher"
+	"github.com/illenko/order-service/internal/repository"
+	"github.com/illenko/order-service/internal/service"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
-	conn, ch, err := connection.ConnectToRabbitMQ()
-	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	messagingConfig := messaging.Config{
+		ConnectionUrl:       "amqp://user:password@localhost:5672/",
+		OrderActionExchange: "order-action-exchange",
+		OrderResultExchange: "order-result-exchange",
+		DLXExchange:         "dlx-exchange",
+		ProductReservationQueue: messaging.QueueConfig{
+			Name: "product-reservation-action-queue",
+			TTL:  15000,
+			DLX:  "dlx-exchange",
+		},
+		ProductCancellationQueue: messaging.QueueConfig{
+			Name: "product-cancellation-action-queue",
+		},
+		PaymentQueue: messaging.QueueConfig{
+			Name: "payment-action-queue",
+			TTL:  60000,
+			DLX:  "dlx-exchange",
+		},
+		ProductReservationResultQueue: messaging.QueueConfig{
+			Name: "product-reservation-result-queue",
+		},
+		PaymentResultQueue: messaging.QueueConfig{
+			Name: "payment-result-queue",
+		},
+		DLXProductReservationQueue: messaging.QueueConfig{
+			Name: "dlx-product-reservation-action-queue",
+		},
+		DLXPaymentQueue: messaging.QueueConfig{
+			Name: "dlx-payment-action-queue",
+		},
 	}
+
+	conn, ch := setupMessaging(messagingConfig)
 	defer conn.Close()
 	defer ch.Close()
 
-	err = declareDLXExchange(ch)
+	repo := repository.NewInMemoryOrderRepository()
+	orderMapper := mapper.NewOrderMapper()
+	amqpMapper := mapper.NewAmqpMapper()
+	orderActionPublisher := publisher.NewOrderActionPublisher(ch)
+
+	orderService := service.NewOrderService(messagingConfig, orderActionPublisher, repo, orderMapper, amqpMapper)
+
+	startConsumers(ch, messagingConfig, orderService)
+	startHttpServer(orderService)
+}
+
+func setupMessaging(config messaging.Config) (*amqp.Connection, *amqp.Channel) {
+	broker := messaging.NewBroker(config)
+
+	conn, ch, err := broker.Setup()
 	if err != nil {
-		log.Fatalf("Failed to declare DLX exchange: %v", err)
+		log.Fatalf("Failed to setup RabbitMQ: %v", err)
 	}
 
-	err = setupDLXQueues(ch, []QueueConfig{
-		{Name: "dlx-product-reservation-action-queue"},
-		{Name: "dlx-payment-action-queue"},
-	})
-	if err != nil {
-		log.Fatalf("Failed to setup DLX queues: %v", err)
+	if err := broker.SetupDLX(ch); err != nil {
+		log.Fatalf("Failed to setup DLX: %v", err)
 	}
 
-	err = setupExchangeAndQueues(ch, "order-action-exchange", []QueueConfig{
-		{Name: "product-reservation-action-queue", TTL: 15000, DLX: "dlx-exchange"},
-		{Name: "product-cancellation-action-queue"},
-		{Name: "payment-action-queue", TTL: 60000, DLX: "dlx-exchange"},
-	})
-	if err != nil {
-		log.Fatalf("Failed to setup order-action-exchange: %v", err)
+	if err := broker.SetupExchangesAndQueues(ch); err != nil {
+		log.Fatalf("Failed to setup exchanges and queues: %v", err)
 	}
 
-	err = setupExchangeAndQueues(ch, "order-result-exchange", []QueueConfig{
-		{Name: "product-reservation-result-queue"},
-		{Name: "payment-result-queue"},
-	})
-	if err != nil {
-		log.Fatalf("Failed to setup order-result-exchange: %v", err)
-	}
+	return conn, ch
+}
 
-	orderAction := amqpmodel.OrderAction{
-		ID:         uuid.New(),
-		CustomerID: uuid.New(),
-		CardID:     uuid.New(),
-		ItemID:     uuid.New(),
-		Price:      100,
-	}
+func startConsumers(ch *amqp.Channel, messagingConfig messaging.Config, orderService *service.OrderService) {
+	orderActionResultConsumer := consumer.NewOrderActionResultConsumerImpl(ch, messagingConfig, orderService)
+	expiredActionConsumer := consumer.NewExpiredActionConsumerImpl(ch, messagingConfig, orderService)
 
-	err = publishOrderAction(ch, "order-action-exchange", "product-reservation-action-queue", orderAction)
-	if err != nil {
-		log.Fatalf("Failed to publish order: %v", err)
-	}
+	go orderActionResultConsumer.ConsumePaymentMessages()
+	go orderActionResultConsumer.ConsumeProductReservationMessages()
+	go expiredActionConsumer.ConsumeExpiredProductReservation()
+	go expiredActionConsumer.ConsumeExpiredPayment()
+}
 
-	go consumeExpiredPayment(ch)
-	go consumeExpiredProductReservation(ch)
-	go consumeProductReservationMessages(ch)
-	go consumePaymentMessages(ch)
+func startHttpServer(orderService *service.OrderService) {
+	orderHandler := handler.NewOrderHandlerImpl(orderService)
 
-	select {}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /orders", orderHandler.CreateOrder)
+	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
+	_ = http.ListenAndServe(":8080", mux)
 }

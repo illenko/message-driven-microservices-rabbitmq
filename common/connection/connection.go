@@ -2,8 +2,8 @@ package connection
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-func ConnectToRabbitMQ() (*amqp.Connection, *amqp.Channel, error) {
-	conn, err := amqp.Dial("amqp://user:password@localhost:5672/")
+func ConnectToRabbitMQ(url string) (*amqp.Connection, *amqp.Channel, error) {
+	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, nil, err
 	}

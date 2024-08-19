@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/illenko/common/amqpmodel"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func PublishOrderResult(ch *amqp.Channel, exchangeName, routingKey string, orderResult amqpmodel.OrderActionResult) error {
-	body, err := json.Marshal(orderResult)
+func PublishMessage[T any](ch *amqp.Channel, exchangeName, routingKey string, message T) error {
+	body, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
@@ -25,7 +24,7 @@ func PublishOrderResult(ch *amqp.Channel, exchangeName, routingKey string, order
 		})
 
 	if err == nil {
-		log.Printf("Order result published: %v in %v with %v rk", orderResult, exchangeName, routingKey)
+		log.Printf("Message published: %v in %v with %v rk", message, exchangeName, routingKey)
 	}
 	return err
 }

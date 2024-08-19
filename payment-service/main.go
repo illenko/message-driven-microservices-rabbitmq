@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	conn, ch, err := connection.ConnectToRabbitMQ()
+	conn, ch, err := connection.ConnectToRabbitMQ("amqp://user:password@localhost:5672/")
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
