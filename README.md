@@ -119,11 +119,13 @@ Responses:
 
 ```json
 {
-  "order_id": "123e4567-e89b-12d3-a456–426614174001",
-  "product_id": "123e4567-e89b-12d3-a456–426614174000",
-  "quantity": 2,
-  "price": 100.0,
-  "status": "created"
+  "id": "ae5e5918-facb-40e5-bbdf-3525cedaaa7e",
+  "customerId": "123e4567-e89b-12d3-a456-426614174000",
+  "cardId": "123e4567-e89b-12d3-a456-426614174003",
+  "itemId": "123e4567-e89b-12d3-a456-426614174002",
+  "price": 100,
+  "status": "pending",
+  "message": "Order is pending"
 }
 ```
 
@@ -139,11 +141,13 @@ Responses:
 
 ```json
 {
-  "order_id": "123e4567-e89b-12d3-a456–426614174001",
-  "product_id": "123e4567-e89b-12d3-a456–426614174000",
-  "quantity": 2,
-  "price": 100.0,
-  "status": "completed"
+  "id": "ae5e5918-facb-40e5-bbdf-3525cedaaa7e",
+  "customerId": "123e4567-e89b-12d3-a456-426614174000",
+  "cardId": "123e4567-e89b-12d3-a456-426614174003",
+  "itemId": "123e4567-e89b-12d3-a456-426614174002",
+  "price": 100,
+  "status": "completed",
+  "message": "Order is completed"
 }
 ```
 
